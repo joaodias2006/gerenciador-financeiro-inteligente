@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CofreFlow — Gerenciador Inteligente de Pagamentos, Boletos &amp; Cofrinho</title>
+  <meta name="description" content="Gerenciador financeiro inteligente com integração Open Finance (Pluggy/Belvo), importação OFX/CSV, leitor de código de barras FEBRABAN/Pix e automação de Cofrinho." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <div class="brand-mark" aria-hidden="true">CF</div>
+        <div>
+          <h1 class="brand-title">CofreFlow Inteligente</h1>
+          <p class="brand-subtitle">Open Finance Brasil • Gestão de Boletos • Automação de Cofrinho</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <label for="file-import-input" class="btn btn-secondary" style="cursor: pointer;">
+          Importar OFX / CSV
+        </label>
+        <input id="file-import-input" type="file" accept=".ofx,.csv" style="display: none;" />
+        <button id="btn-demo-import" type="button" class="btn btn-secondary">
+          Testar Extrato OFX
+        </button>
+        <button id="btn-open-api-modal" type="button" class="btn btn-secondary">
+          Conectar Open Finance
+        </button>
+        <button id="btn-sync-openfinance" type="button" class="btn btn-primary">
+          Sincronizar Bancos
+        </button>
+        <button id="btn-toggle-theme" type="button" class="btn btn-secondary" title="Alternar tema claro/escuro">
+          Tema
+        </button>
+        <button id="btn-reset-demo" type="button" class="btn btn-secondary" title="Restaurar dados iniciais">
+          Resetar Demo
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Indicadores Consolidados -->
+    <section class="kpi-grid" aria-label="Resumo Financeiro Consolidado">
+      <article class="kpi-card">
+        <div class="kpi-label">
+          <span>Saldo Consolidado em Contas</span>
+          <span>Open Finance</span>
+        </div>
+        <div id="kpi-checking-balance" class="kpi-value mono-num">R$ 0,00</div>
+        <div class="kpi-meta">Nubank + Itaú + Banco Inter</div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-label">
+          <span>Boletos &amp; Contas a Pagar</span>
+          <span>Prioridade</span>
+        </div>
+        <div id="kpi-pending-bills" class="kpi-value mono-num">R$ 0,00</div>
+        <div id="kpi-pending-meta" class="kpi-meta">Calculando vencimentos...</div>
+      </article>
+
+      <article class="kpi-card highlight-cofrinho">
+        <div class="kpi-label">
+          <span>Livre p/ Guardar no Cofrinho Hoje</span>
+          <span>100% Seguro</span>
+        </div>
+        <div id="kpi-safe-save" class="kpi-value mono-num">R$ 0,00</div>
+        <div id="kpi-safe-meta" class="kpi-meta">Já descontando boletos e reserva</div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-label">
+          <span>Saldo Total nos Cofrinhos</span>
+          <span>102% CDI</span>
+        </div>
+        <div id="kpi-cofrinho-total" class="kpi-value mono-num">R$ 0,00</div>
+        <div id="kpi-cofrinho-yield" class="kpi-meta">Rendimento diário ativo</div>
+      </article>
+    </section>
+
+    <!-- Contas Bancárias Conectadas -->
+    <section class="panel" aria-labelledby="heading-banks">
+      <div class="panel-header">
+        <div>
+          <h2 id="heading-banks" class="panel-title">Contas Bancárias &amp; Cartões Conectados</h2>
+          <p class="panel-subtitle">Visão unificada via Open Finance (Pluggy / Belvo) e conciliação de extratos OFX/CSV</p>
+        </div>
+      </div>
+      <div id="banks-container" class="banks-list"></div>
+    </section>
+
+    <!-- Grid Principal: Gestão de Boletos + Inteligência do Cofrinho -->
+    <div class="workspace-grid">
+      <!-- Coluna Esquerda: Leitor de Boletos/Pix e Lista de Pagamentos -->
+      <section class="panel" aria-labelledby="heading-bills">
+        <div class="panel-header">
+          <div>
+            <h2 id="heading-bills" class="panel-title">Central de Boletos, Contas &amp; Pix</h2>
+            <p class="panel-subtitle">Priorização automática por vencimento e cálculo de multa evitada</p>
+          </div>
+          <div class="filter-tabs" role="tablist">
+            <button type="button" class="tab-btn active" data-bill-filter="all">Todos</button>
+            <button type="button" class="tab-btn" data-bill-filter="urgent">Urgentes</button>
+            <button type="button" class="tab-btn" data-bill-filter="pending">Pendentes</button>
+            <button type="button" class="tab-btn" data-bill-filter="paid">Pagos</button>
+          </div>
+        </div>
+
+        <!-- Leitor de Código de Barras FEBRABAN e Pix Copia e Cola -->
+        <div class="scanner-box">
+          <label for="barcode-input" style="display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.45rem;">
+            Leitor Inteligente de Boleto (47/48 dígitos FEBRABAN) ou Pix Copia e Cola:
+          </label>
+          <div class="scanner-row">
+            <input
+              id="barcode-input"
+              type="text"
+              class="input-field scanner-input mono-num"
+              placeholder="Cole a linha digitável do boleto ou código Pix 000201..."
+            />
+            <button id="btn-decode-barcode" type="button" class="btn btn-primary">
+              Ler e Adicionar Conta
+            </button>
+          </div>
+          <div class="quick-presets">
+            <span class="preset-label">Testar leitura automática:</span>
+            <button type="button" class="btn btn-secondary btn-xs" data-sample-code="boleto_itau">
+              + Boleto Itaú (R$ 459,90)
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs" data-sample-code="concessionaria_luz">
+              + Conta Energia (R$ 248,90)
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs" data-sample-code="pix_copia_cola">
+              + Pix Academia (R$ 139,90)
+            </button>
+          </div>
+          <p id="barcode-feedback" style="margin: 0.5rem 0 0; font-size: 0.78rem;"></p>
+        </div>
+
+        <!-- Lista de Boletos -->
+        <div id="bills-list-container" class="bills-list"></div>
+      </section>
+
+      <!-- Coluna Direita: Motor de Automação do Cofrinho -->
+      <aside class="panel" aria-labelledby="heading-cofrinho">
+        <div class="panel-header">
+          <div>
+            <h2 id="heading-cofrinho" class="panel-title">Automação do Cofrinho</h2>
+            <p class="panel-subtitle">Descubra exatamente o que pagar e quanto guardar sem ficar no vermelho</p>
+          </div>
+        </div>
+
+        <div class="cofrinho-hero">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem;">
+            <span style="font-size: 0.82rem; font-weight: 600;">Aporte Seguro Recomendado Hoje:</span>
+            <strong id="cofrinho-safe-now-highlight" class="mono-num" style="font-size: 1.45rem; color: var(--brand-text);">R$ 0,00</strong>
+          </div>
+          <p id="cofrinho-mode-desc" style="margin: 0.35rem 0 0; font-size: 0.79rem; color: var(--text-secondary);"></p>
+        </div>
+
+        <!-- Gráfico de Alocação do Saldo -->
+        <div style="margin-bottom: 1rem;">
+          <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">
+            Distribuição Inteligente do Seu Caixa Atual
+          </div>
+          <canvas id="allocation-canvas" style="width: 100%; height: 84px; display: block;"></canvas>
+        </div>
+
+        <!-- Recomendações Passo a Passo -->
+        <div id="cofrinho-recommendations" class="cofrinho-recommendation-list"></div>
+
+        <!-- Simulador e Parâmetros -->
+        <div style="border-top: 1px solid var(--border-subtle); padding-top: 1rem; margin-top: 1rem;">
+          <div style="margin-bottom: 0.85rem;">
+            <label for="select-automation-mode" style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem;">
+              Perfil de Automação do Cofrinho
+            </label>
+            <select id="select-automation-mode" class="select-field" style="width: 100%;">
+              <option value="conservador">Conservador (30% de margem de segurança)</option>
+              <option value="equilibrado">Equilibrado — Regra 50-30-20 Inteligente</option>
+              <option value="agressivo">Meta Acelerada (Máximo Rendimento 102% CDI)</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+              <label for="input-monthly-income">Renda Mensal Prevista</label>
+              <strong id="label-monthly-income" class="mono-num">R$ 8.600,00</strong>
+            </div>
+            <input id="input-monthly-income" type="range" min="2000" max="25000" step="100" value="8600" style="width: 100%;" />
+          </div>
+
+          <div style="margin-bottom: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+              <label for="input-living-reserve">Reserva p/ Gastos Variáveis do Mês</label>
+              <strong id="label-living-reserve" class="mono-num">R$ 1.400,00</strong>
+            </div>
+            <input id="input-living-reserve" type="range" min="300" max="8000" step="50" value="1400" style="width: 100%;" />
+          </div>
+
+          <!-- Regras Automáticas -->
+          <div style="margin: 1rem 0;">
+            <div class="rule-toggle">
+              <span>Arredondar troco de Pix e Cartão p/ Cofrinho</span>
+              <input id="rule-roundUpPix" type="checkbox" checked />
+            </div>
+            <div class="rule-toggle">
+              <span>Guardar 10% automaticamente de cada receita recebida</span>
+              <input id="rule-autoSaveIncomePercent" type="checkbox" checked />
+            </div>
+            <div class="rule-toggle">
+              <span>Transferir sobra do mês após quitar todos os boletos</span>
+              <input id="rule-sweepMonthlySurplus" type="checkbox" checked />
+            </div>
+          </div>
+
+          <!-- Aporte Manual Rápido -->
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem;">
+            <input
+              id="input-custom-cofrinho"
+              type="number"
+              min="10"
+              step="10"
+              class="input-field mono-num"
+              style="flex: 1;"
+              placeholder="Valor p/ guardar (R$)"
+            />
+            <button id="btn-custom-cofrinho" type="button" class="btn btn-primary">
+              Guardar Agora
+            </button>
+          </div>
+
+          <!-- Metas do Cofrinho -->
+          <h3 style="font-size: 0.9rem; margin: 0 0 0.65rem;">Metas dos Seus Cofrinhos</h3>
+          <div id="cofrinho-goals-list"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Modal de Conexão Open Finance (Pluggy / Belvo) -->
+  <div id="modal-openfinance" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-of-title">
+    <div class="modal-card">
+      <h2 id="modal-of-title" style="margin: 0 0 0.4rem; font-size: 1.1rem;">Configurar Conexão Open Finance Brasil</h2>
+      <p style="margin: 0 0 1rem; font-size: 0.83rem; color: var(--text-secondary);">
+        Conecte sua chave da <strong>Pluggy</strong> ou <strong>Belvo</strong> para sincronização automática de contas e boletos (DDA), ou deixe em branco para usar o Sandbox Simulado.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.2rem;">
+        <div>
+          <label for="of-provider" style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Provedor Open Finance</label>
+          <select id="of-provider" class="select-field" style="width: 100%;">
+            <option value="pluggy">Pluggy (Open Finance Brasil &amp; DDA Boletos)</option>
+            <option value="belvo">Belvo (Open Finance América Latina)</option>
+          </select>
+        </div>
+        <div>
+          <label for="of-client-id" style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Client ID (opcional no modo Sandbox)</label>
+          <input id="of-client-id" type="text" class="input-field mono-num" style="width: 100%;" placeholder="ex: 8f94a2b0-xxxx-xxxx-xxxx-129481920a" />
+        </div>
+        <div>
+          <label for="of-client-secret" style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">Client Secret (opcional no modo Sandbox)</label>
+          <input id="of-client-secret" type="password" class="input-field mono-num" style="width: 100%;" placeholder="••••••••••••••••••••••••" />
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.6rem;">
+        <button id="btn-close-api-modal" type="button" class="btn btn-secondary">Cancelar</button>
+        <button id="btn-save-api-config" type="button" class="btn btn-primary">Salvar e Sincronizar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-notification" class="toast-banner" role="status" aria-live="polite"></div>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
