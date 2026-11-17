@@ -1,39 +1,55 @@
-# CofreFlow — Gerenciador Inteligente de Pagamentos, Boletos & Automação de Cofrinho
+# Raio-X Financeiro — Gestão Financeira Pessoal Inteligente & Open Finance
 
-Aplicativo web completo para controle consolidado de contas bancárias, gestão inteligente de boletos (DDA / FEBRABAN / Pix) e recomendação automatizada de aportes no **Cofrinho** (102% CDI).
+Aplicação web full-stack moderna e responsiva para controle rigoroso de gastos, clareza em tempo real de fluxo de caixa e consolidação de múltiplas contas bancárias do mesmo titular.
 
-## Funcionalidades Principais
+## 1. Stack e Arquitetura Técnica
 
-1. **Conexão Multi-Bancos (Open Finance + Importador OFX/CSV)**:
-   - Visão consolidada de contas correntes e faturas de cartão de crédito (Nubank, Itaú, Banco Inter, etc.).
-   - Importação direta de extratos bancários nos formatos **`.ofx`** (Open Financial Exchange) e **`.csv`** com categorização automática.
-   - Estrutura pronta para conexão com agregadores **Open Finance Brasil** (**Pluggy** e **Belvo**), incluindo modo Sandbox interativo.
+- **Frontend:** React 18 (Vite), Tailwind CSS v4, ícones `lucide-react` e gráficos interativos (`recharts`).
+- **Backend & Banco de Dados:**
+  - **API Full-Stack Node.js + SQLite (`node:sqlite`):** Servidor integrado em [`server/apiPlugin.js`](server/apiPlugin.js) e banco relacional em [`server/db.js`](server/db.js) com autenticação e isolamento de dados por titular (`user_id` / CPF).
+  - **Esquema PostgreSQL / Supabase (`RLS`):** Script completo em [`supabase/schema.sql`](supabase/schema.sql) com políticas de *Row Level Security* (`auth.uid() = user_id`).
+- **Design System (UI/UX):**
+  - Estilo fintech moderna com suporte a **Dark Mode** e **Light Mode**.
+  - **Modo Privacidade** para ocultar/exibir todos os valores monetários com um clique.
+  - Tipografia numérica tabular (`JetBrains Mono`) e alertas visuais semânticos (Verde = Margem Segura, Amarelo = Atenção ao Limite, Vermelho = Limite Excedido).
 
-2. **Central de Boletos e Contas a Pagar + Leitor FEBRABAN & Pix**:
-   - **Leitor real de Linha Digitável FEBRABAN** (47 dígitos para boletos bancários e 48 dígitos para concessionárias de água, luz, internet e tributos) com cálculo automático do vencimento (incluindo o novo fator de vencimento pós-22/02/2025) e extração do valor e banco emissor.
-   - **Decodificador de Pix Copia e Cola (BRCode EMV `000201...`)**: extrai automaticamente recebedor, cidade e valor.
-   - Priorização automática por criticidade (*Atrasado*, *Vence Hoje*, *Em até 3 dias*, *Programado*) com cálculo de multa (2%) + juros evitados.
+---
 
-3. **Motor Inteligente de Automação do Cofrinho**:
-   - Calcula exatamente **o que pagar agora** e **quanto guardar com segurança no Cofrinho hoje** descontando todos os boletos pendentes, reserva para gastos variáveis e margem de segurança:
-     $$\text{Aporte Seguro} = \text{Saldo em Conta} - \left(\text{Boletos Pendentes} + \text{Reserva do Mês} + 0.5 \times \text{Margem de Segurança}\right)$$
-   - Três perfis de automação (*Conservador*, *Equilibrado 50-30-20* e *Meta Acelerada*) e regras de arredondamento de troco Pix e percentual sobre receitas.
+## 2. Módulos Principais
 
-## Estrutura do Projeto
+### 2.1. Minhas Contas e Bancos (Open Finance & Importação)
+- Gerenciamento consolidado e individual de múltiplas instituições financeiras do mesmo titular (**Nubank**, **Itaú Unibanco**, **Banco Inter**, **Bradesco**, **Banco do Brasil**, **Caixa**, **Santander**, **BTG Pactual**, **C6 Bank**).
+- **Arquitetura Modular Open Finance Brasil:** Adaptador pronto para **Pluggy** e **Belvo** em [`src/services/openFinanceService.js`](src/services/openFinanceService.js).
+- **Simulador de Conexão Bancária:** Conecte qualquer banco com 1 clique para teste imediato com saldo, limite de cartão e lançamentos realistas.
+- **Importador de Extratos Manuais (`.OFX` e `.CSV`):** Upload de arquivos reais ou simulação instantânea com categorização automática e detecção de meio de pagamento.
 
-- `index.html`: Interface principal semântica e responsiva.
-- `styles.css`: Design System em Vanilla CSS com suporte a Tema Claro e Escuro.
-- `src/openFinance.js`: Decodificador FEBRABAN/Pix EMV, parser de arquivos `.ofx` e `.csv` e conector Open Finance (Pluggy/Belvo).
-- `src/cofrinhoEngine.js`: Motor matemático de priorização de boletos e cálculo de aporte seguro no Cofrinho.
-- `src/app.js`: Gerenciamento de estado, eventos, gráficos em Canvas e persistência local (`localStorage`).
-- `samples/`: Arquivos `extrato-exemplo.ofx` e `extrato-exemplo.csv` para testar a importação imediatamente.
+### 2.2. Dashboard Principal — Visão Inteligente do Mês
+1. **Card "Livre para Gastar" (Safe-to-Spend):**
+   $$\text{Livre para Gastar} = (\text{Saldo Total em Conta} + \text{Receitas do Mês}) - (\text{Gastos Já Realizados} + \text{Contas Fixas/Comprometidas a Pagar} + \text{Meta de Reserva})$$
+2. **Card "Dinheiro Intocável / Comprometido":** Soma automática de contas fixas pendentes, boletos agendados e faturas/parcelas de cartão a vencer no mês.
+3. **Card "Cofre & Reserva para o Próximo Mês":** Meta de poupança editável, acompanhamento do valor guardado no mês e controle de *rollover* (reforço de caixa) para o mês seguinte.
+4. **Card "Sobra Real do Mês":** Diferença líquida entre todas as entradas e saídas do mês em tempo real.
+5. **Painel "Crédito vs. Débito & Meios de Pagamento":**
+   - Termômetro de limite de cartão de crédito (Limite Total, Limite Utilizado, Limite Livre e Fatura Atual).
+   - Gráficos Recharts comparando saídas à vista vs. crédito, distribuição por Meio de Pagamento e por Categoria.
 
-## Como Executar Localmente
+### 2.3. Registro e Histórico Completo de Pagamentos
+- **Modal "+ Registrar Pagamento / Receita":** Suporte a Despesa/Receita, Banco/Conta, Categoria, Status (`Pago` / `Agendado`), Conta Fixa Recorrente e Forma de Pagamento (`Pix`, `Cartão de Crédito à Vista`, `Cartão de Crédito Parcelado`, `Cartão de Débito`, `Boleto`, `Transferência`, `Benefício`).
+- **Geração Automática de Parcelas Futuras:** Ao selecionar **Cartão de Crédito Parcelado** (`ex: 1 de 6`), o sistema gera automaticamente as parcelas nos meses seguintes.
+- **Extrato Unificado de Gestão:** Busca textual, filtros combinados por período, banco, meio de pagamento, categoria e status, baixa rápida com 1 clique, edição, exclusão e exportação `.CSV`.
 
-Basta servir a pasta raiz com qualquer servidor HTTP estático (por exemplo, Python ou Node.js):
+### 2.4. Previsão do Próximo Mês
+- Cálculo automático dos **Gastos já comprometidos para o próximo mês** (parcelas de cartão futuras + despesas fixas recorrentes).
+- Cálculo do **Orçamento estimado do próximo mês**:
+  $$\text{Orçamento Estimado} = (\text{Renda Mensal Prevista} + \text{Sobra/Reserva Acumulada Deste Mês}) - \text{Gastos Já Comprometidos para o Próximo Mês}$$
+- Simulador rápido de impacto de novas compras parceladas e gráfico de evolução de comprometimento para os próximos 6 meses.
+
+---
+
+## 3. Como Executar Localmente
 
 ```bash
-npx serve .
-# ou
-python3 -m http.server 8080
+npm install
+npm run dev
 ```
+O servidor iniciará em `http://localhost:5173` com o Frontend React + Vite e a API Full-Stack SQLite (`/api/*`) integrados.
