@@ -71,7 +71,7 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Carrega dados do Backend SQL (/api/state) para o titular autenticado
+  // Carrega dados do Backend SQL (/api/state) ou localStorage (quando publicado estaticamente no GitHub Pages)
   useEffect(() => {
     let active = true;
     async function loadFromBackend() {
@@ -87,11 +87,22 @@ export default function App() {
         if (Array.isArray(data.banks)) setBanks(data.banks);
         if (Array.isArray(data.transactions)) setTransactions(data.transactions);
       } catch {
-        // Fallback offline se aberto fora do servidor Node
+        if (!active) return;
+        const cachedRaw = localStorage.getItem(`raiox_state_${currentUserId}`);
+        if (cachedRaw) {
+          try {
+            const cached = JSON.parse(cachedRaw);
+            if (cached.userProfile) setUserProfile(cached.userProfile);
+            if (Array.isArray(cached.banks)) setBanks(cached.banks);
+            if (Array.isArray(cached.transactions)) setTransactions(cached.transactions);
+            return;
+          } catch {
+            // Segue para seed inicial
+          }
+        }
         const fallbackProfile =
           DEMO_USERS.find((u) => u.id === currentUserId) || DEMO_USERS[0];
         const seeded = generateSeedDataForUser(currentUserId);
-        if (!active) return;
         setUserProfile(fallbackProfile);
         setBanks(seeded.banks);
         setTransactions(seeded.transactions);
@@ -102,6 +113,18 @@ export default function App() {
       active = false;
     };
   }, [currentUserId]);
+
+  // Salva cópia local por titular para funcionamento offline / GitHub Pages
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `raiox_state_${currentUserId}`,
+        JSON.stringify({ userProfile, banks, transactions })
+      );
+    } catch {
+      // Ignora erro de quota
+    }
+  }, [currentUserId, userProfile, banks, transactions]);
 
   const applyServerState = (data) => {
     if (data?.user) setUserProfile(data.user);

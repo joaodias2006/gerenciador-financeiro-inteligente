@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { raioxApiVitePlugin } from './server/apiPlugin.js';
 
 export default defineConfig({
+  base: './',
   plugins: [
     react(),
     tailwindcss(),
