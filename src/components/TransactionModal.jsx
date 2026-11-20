@@ -5,7 +5,8 @@ import {
   Layers,
   Repeat,
   CheckCircle2,
-  Clock
+  Clock,
+  QrCode
 } from 'lucide-react';
 import {
   PAYMENT_METHODS,
@@ -13,6 +14,7 @@ import {
   INCOME_CATEGORIES,
   buildRelativeDate
 } from '../data/initialData.js';
+import { decodeRealBoletoOrPix } from '../services/openFinanceService.js';
 import { formatBRL } from '../utils/formatters.js';
 
 export default function TransactionModal({
@@ -34,7 +36,13 @@ export default function TransactionModal({
   const [installmentsCount, setInstallmentsCount] = useState(6);
   const [isFixed, setIsFixed] = useState(false);
 
+  // Leitor de Boleto FEBRABAN / Pix Copia e Cola
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [barcodeMsg, setBarcodeMsg] = useState('');
+
   useEffect(() => {
+    setBarcodeInput('');
+    setBarcodeMsg('');
     if (editingTransaction) {
       setType(editingTransaction.type || 'expense');
       setAmount(String(editingTransaction.amount || ''));
@@ -65,6 +73,24 @@ export default function TransactionModal({
   if (!isOpen) return null;
 
   const categoriesList = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+
+  const handleDecodeBarcode = () => {
+    const res = decodeRealBoletoOrPix(barcodeInput);
+    if (!res.valid) {
+      setBarcodeMsg(res.error);
+      return;
+    }
+    setType('expense');
+    if (res.amount > 0) setAmount(String(res.amount.toFixed(2)));
+    if (res.dueDate) setDate(res.dueDate);
+    if (res.description) setDescription(res.description);
+    if (res.category) setCategory(res.category);
+    if (res.paymentMethod) setPaymentMethod(res.paymentMethod);
+    if (res.status) setStatus(res.status);
+    setBarcodeMsg(
+      `✓ ${res.paymentMethod} identificado automaticamente (${formatBRL(res.amount)})!`
+    );
+  };
 
   const handleTypeChange = (newType) => {
     setType(newType);
@@ -128,13 +154,13 @@ export default function TransactionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-5 my-8">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 my-8">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
             <PlusCircle className="w-5 h-5 text-emerald-500" />
             {editingTransaction
               ? 'Editar Lançamento Financeiro'
-              : 'Registrar Pagamento / Receita'}
+              : 'Registrar Pagamento / Receita Real'}
           </h2>
           <button
             type="button"
@@ -144,6 +170,37 @@ export default function TransactionModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Leitor Rápido de Boleto FEBRABAN ou Pix Copia e Cola */}
+        {!editingTransaction && (
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2">
+            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+              <QrCode className="w-3.5 h-3.5 text-emerald-500" />
+              Leitor Rápido de Boleto (47/48 dígitos) ou Pix Copia e Cola (Opcional)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Cole a linha digitável do seu boleto ou código Pix 000201..."
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono-num"
+              />
+              <button
+                type="button"
+                onClick={handleDecodeBarcode}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shrink-0 cursor-pointer"
+              >
+                Ler Código
+              </button>
+            </div>
+            {barcodeMsg && (
+              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                {barcodeMsg}
+              </p>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Seletor Despesa vs Receita */}

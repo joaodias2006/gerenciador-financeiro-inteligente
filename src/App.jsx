@@ -14,7 +14,9 @@ import {
   RotateCcw,
   Eraser,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Upload
 } from 'lucide-react';
 import {
   DEMO_USERS,
@@ -27,7 +29,6 @@ import {
   generateInstallmentTransactions
 } from './services/financialEngine.js';
 import {
-  formatMonthYearLabel,
   getSelectableMonths
 } from './utils/formatters.js';
 import DashboardTab from './components/DashboardTab.jsx';
@@ -38,16 +39,13 @@ import TransactionModal from './components/TransactionModal.jsx';
 import AuthTitularModal from './components/AuthTitularModal.jsx';
 
 export default function App() {
-  // Tema (Dark por padrão estilo fintech moderna) e Modo Privacidade
   const [darkMode, setDarkMode] = useState(true);
   const [privacyMode, setPrivacyMode] = useState(false);
 
-  // Navegação e Filtros Globais
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'banks' | 'transactions' | 'projection'
   const [selectedMonthKey, setSelectedMonthKey] = useState(getCurrentMonthKey());
   const [selectedBankId, setSelectedBankId] = useState('all');
 
-  // Estado Full-Stack Isolado por Titular
   const [currentUserId, setCurrentUserId] = useState('user-joao-01');
   const [allUsers, setAllUsers] = useState(DEMO_USERS);
   const [userProfile, setUserProfile] = useState(DEMO_USERS[0]);
@@ -56,12 +54,10 @@ export default function App() {
     () => generateSeedDataForUser('user-joao-01').transactions
   );
 
-  // Modais
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Sincroniza classe dark no HTML
   useEffect(() => {
     const root = document.documentElement;
     if (darkMode) {
@@ -79,7 +75,10 @@ export default function App() {
         const res = await fetch(`/api/state?userId=${encodeURIComponent(currentUserId)}`, {
           headers: { 'x-user-id': currentUserId }
         });
-        if (!res.ok) throw new Error('Fallback local');
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
+          throw new Error('Fallback local');
+        }
         const data = await res.json();
         if (!active) return;
         if (data.user) setUserProfile(data.user);
@@ -114,7 +113,7 @@ export default function App() {
     };
   }, [currentUserId]);
 
-  // Salva cópia local por titular para funcionamento offline / GitHub Pages
+  // Salva cópia local por titular para funcionamento permanente no navegador
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -133,7 +132,6 @@ export default function App() {
     if (Array.isArray(data?.transactions)) setTransactions(data.transactions);
   };
 
-  // Cálculo em tempo real do Raio-X Financeiro
   const xray = useMemo(
     () =>
       calculateFinancialXRay({
@@ -146,10 +144,28 @@ export default function App() {
     [banks, transactions, userProfile, selectedMonthKey, selectedBankId]
   );
 
-  const selectableMonths = useMemo(
-    () => getSelectableMonths(getCurrentMonthKey()),
-    []
-  );
+  // Meses selecionáveis incluindo qualquer mês presente nas transações reais importadas
+  const selectableMonths = useMemo(() => {
+    const baseList = getSelectableMonths(getCurrentMonthKey());
+    const map = new Map(baseList.map((m) => [m.key, m]));
+    transactions.forEach((t) => {
+      const mk = (t.date || '').slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(mk) && !map.has(mk)) {
+        const [y, m] = mk.split('-').map(Number);
+        const names = [
+          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
+        map.set(mk, {
+          key: mk,
+          label: `${names[(m - 1) % 12]} de ${y}`,
+          isCurrent: false,
+          isNext: false
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [transactions]);
 
   const handleShiftMonth = (delta) => {
     const [y, m] = selectedMonthKey.split('-').map(Number);
@@ -159,9 +175,6 @@ export default function App() {
     );
   };
 
-  // =========================================================================
-  // HANDLERS DE MUTAÇÃO (FULL-STACK API + ATUALIZAÇÃO INSTANTÂNEA)
-  // =========================================================================
   const handleUpdateProfile = async (updates) => {
     setUserProfile((prev) => ({ ...prev, ...updates }));
     try {
@@ -173,9 +186,11 @@ export default function App() {
         },
         body: JSON.stringify(updates)
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Estado já atualizado otimistamente
+      // Salvo no localStorage
     }
   };
 
@@ -193,14 +208,15 @@ export default function App() {
           },
           body: JSON.stringify(txPayload)
         });
-        if (res.ok) applyServerState(await res.json());
+        if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+          applyServerState(await res.json());
+        }
       } catch {
-        // Otimista mantido
+        // Salvo no localStorage
       }
       return;
     }
 
-    // Criação de novo lançamento (com geração automática de parcelas futuras se Crédito Parcelado)
     const generatedList = generateInstallmentTransactions(
       { ...txPayload, userId: currentUserId },
       installmentsCount
@@ -217,9 +233,11 @@ export default function App() {
         },
         body: JSON.stringify({ transactions: generatedList })
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
@@ -237,9 +255,11 @@ export default function App() {
         },
         body: JSON.stringify({ status: newStatus })
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
@@ -260,9 +280,11 @@ export default function App() {
           headers: { 'x-user-id': currentUserId }
         }
       );
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
@@ -280,9 +302,11 @@ export default function App() {
         },
         body: JSON.stringify({ bank: newBank, transactions: sampleTransactions })
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
@@ -299,9 +323,11 @@ export default function App() {
         },
         body: JSON.stringify(updates)
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
@@ -314,14 +340,22 @@ export default function App() {
         method: 'DELETE',
         headers: { 'x-user-id': currentUserId }
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
   const handleImportTransactions = async (importedItems) => {
     setTransactions((prev) => [...importedItems, ...prev]);
+    if (importedItems.length > 0 && importedItems[0].date) {
+      const importedMonth = importedItems[0].date.slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(importedMonth)) {
+        setSelectedMonthKey(importedMonth);
+      }
+    }
     try {
       const res = await fetch('/api/transactions', {
         method: 'POST',
@@ -331,13 +365,15 @@ export default function App() {
         },
         body: JSON.stringify({ transactions: importedItems })
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
-  // Limpar dados de exemplo para o usuário começar do zero
+  // Limpa dados de exemplo para o usuário iniciar sua gestão real do zero
   const handleClearSampleData = async () => {
     setTransactions([]);
     setBanks((prev) =>
@@ -348,18 +384,20 @@ export default function App() {
       vaultSavedCurrentMonth: 0,
       rolloverAmount: 0
     }));
+    setActiveTab('banks');
     try {
       const res = await fetch('/api/seed/clear', {
         method: 'POST',
         headers: { 'x-user-id': currentUserId }
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
   };
 
-  // Restaurar dados de exemplo
   const handleRestoreSampleData = async () => {
     const seeded = generateSeedDataForUser(currentUserId);
     setBanks(seeded.banks);
@@ -376,10 +414,49 @@ export default function App() {
         method: 'POST',
         headers: { 'x-user-id': currentUserId }
       });
-      if (res.ok) applyServerState(await res.json());
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        applyServerState(await res.json());
+      }
     } catch {
-      // Otimista mantido
+      // Salvo no localStorage
     }
+  };
+
+  // Exportar Backup Completo dos Dados Reais (.JSON)
+  const handleExportBackupJSON = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      userProfile,
+      banks,
+      transactions
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup-raiox-financeiro-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Importar Backup Completo (.JSON)
+  const handleImportBackupJSON = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(String(ev.target?.result || '{}'));
+        if (parsed.userProfile) setUserProfile(parsed.userProfile);
+        if (Array.isArray(parsed.banks)) setBanks(parsed.banks);
+        if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+      } catch {
+        // Ignora JSON inválido
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleRegisterNewUser = async (newUserData) => {
@@ -389,11 +466,13 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUserData)
       });
-      if (res.ok) {
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
         const state = await res.json();
         setCurrentUserId(state.user.id);
         applyServerState(state);
+        return;
       }
+      throw new Error('Local');
     } catch {
       const customId = `user-${Date.now()}`;
       const newProfile = {
@@ -410,6 +489,9 @@ export default function App() {
       setAllUsers((prev) => [...prev, newProfile]);
       setCurrentUserId(customId);
       setUserProfile(newProfile);
+      setBanks([]);
+      setTransactions([]);
+      setActiveTab('banks');
     }
   };
 
@@ -417,12 +499,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
-      {/* =====================================================================
-          HEADER SUPERIOR (ESTILO FINTECH MODERNA)
-         ===================================================================== */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          {/* Identidade Visual */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
               <Activity className="w-5 h-5" />
@@ -433,7 +511,7 @@ export default function App() {
                   Raio-X Financeiro
                 </h1>
                 <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                  Open Finance
+                  Open Finance & Gestão Real
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
@@ -442,7 +520,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Seletor de Mês Central */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/70">
             <button
               type="button"
@@ -480,7 +557,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Controles Rápidos: Novo Lançamento, Modo Privacidade, Tema, Titular */}
           <div className="flex items-center gap-2">
             <button
               id="btn-quick-launch"
@@ -496,7 +572,6 @@ export default function App() {
               <span className="md:hidden">Lançar</span>
             </button>
 
-            {/* Botão Modo Privacidade */}
             <button
               id="btn-privacy-mode"
               type="button"
@@ -514,7 +589,6 @@ export default function App() {
               </span>
             </button>
 
-            {/* Botão Dark / Light Mode */}
             <button
               id="btn-theme-toggle"
               type="button"
@@ -525,7 +599,6 @@ export default function App() {
               {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Botão de Titular Autenticado (Isolamento por CPF) */}
             <button
               id="btn-auth-titular"
               type="button"
@@ -545,7 +618,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Barra de Abas de Navegação + Botão Limpar Dados de Exemplo */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 py-2">
           <nav className="flex items-center gap-1 overflow-x-auto">
             {[
@@ -591,8 +663,31 @@ export default function App() {
             })}
           </nav>
 
-          {/* Controle de Dados de Exemplo (Limpar / Restaurar) */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportBackupJSON}
+              title="Salvar backup completo dos seus dados reais no computador"
+              className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 cursor-pointer hover:border-emerald-500/50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Backup</span>
+            </button>
+
+            <label
+              title="Restaurar backup de arquivo .JSON"
+              className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 cursor-pointer hover:border-emerald-500/50"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Restaurar</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={handleImportBackupJSON}
+                className="hidden"
+              />
+            </label>
+
             {!isDataCleared ? (
               <button
                 id="btn-clear-sample-data"
@@ -601,7 +696,7 @@ export default function App() {
                 className="px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Eraser className="w-3.5 h-3.5" />
-                Limpar dados de exemplo
+                Limpar dados de exemplo (Usar Meus Dados Reais)
               </button>
             ) : (
               <button
@@ -618,9 +713,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* =====================================================================
-          CONTEÚDO PRINCIPAL
-         ===================================================================== */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         {activeTab === 'dashboard' && (
           <DashboardTab
@@ -691,19 +783,17 @@ export default function App() {
         )}
       </main>
 
-      {/* Rodapé Técnico Discreto */}
       <footer className="border-t border-slate-200/70 dark:border-slate-800/80 py-4 px-4 sm:px-6 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
             <strong>Raio-X Financeiro</strong> • Gestão Pessoal Inteligente & Consolidação Multibancos
           </span>
           <span>
-            Titular Isolado: <strong className="text-slate-600 dark:text-slate-300">{userProfile.name}</strong> ({userProfile.cpf}) • Open Finance Brasil Ready
+            Titular Isolado: <strong className="text-slate-600 dark:text-slate-300">{userProfile.name}</strong> ({userProfile.cpf}) • Dados Salvos Localmente & SQL Ready
           </span>
         </div>
       </footer>
 
-      {/* Modal de Lançamento Rápido / Edição */}
       <TransactionModal
         isOpen={isTxModalOpen}
         onClose={() => {
@@ -715,7 +805,6 @@ export default function App() {
         onSaveTransaction={handleSaveTransaction}
       />
 
-      {/* Modal de Autenticação e Isolamento por Titular */}
       <AuthTitularModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
